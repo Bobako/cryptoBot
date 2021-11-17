@@ -55,6 +55,7 @@ class User(Base):
         for balance in self.balance:
             if balance.currency == currency:
                 return balance.amount
+        return 0
 
 
 class Operation(Base):
@@ -71,6 +72,8 @@ class Operation(Base):
     address = Column(String)
     linked_operation_id = Column(Integer)
     linked_operation = None
+    frozen = Column(Boolean)
+    notification_id = Column(Integer)
 
     def __init__(self, user_id, type_, currency, amount, pseudo_uid=None, address=None):
         self.user_id = user_id
@@ -81,29 +84,36 @@ class Operation(Base):
         self.confirmed = False
         self.date = datetime.datetime.now()
         self.address = address
+        self.frozen = False
+        self.notification_id = None
 
     def link(self, session):
         if self.linked_operation_id:
             self.linked_operation = session.query(Operation).filter(Operation.id == self.linked_operation_id).one()
 
     def __repr__(self):
-        r = f"{self.type_} #{self.id} от @{self.user.username} на {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}\n"
+        if self.type_ == "EscrowSell":
+            badge_type = "EscrowExchange"
+        else:
+            badge_type = self.type_
+        r = f"{badge_type} #{self.id} от @{self.user.username}: {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}\n"
         if self.linked_operation:
             r += f"за {self.linked_operation.amount:.{SYMBOLS[self.linked_operation.currency]}f} {self.linked_operation.currency}"
         if self.address:
             r += f"Реквезиты: {self.address}"
         if (self.currency in CRYPTO_CURRENCIES and self.type_ == "Deposit") \
                 or self.type_ == "FastSell" and self.currency in CRYPTO_CURRENCIES and self.linked_operation.currency in CRYPTO_CURRENCIES:
-            r += "Эта операция будет совершена автоматически"  # TODO
+            r += "Эта операция будет совершена автоматически"
 
         return r
 
-    def format(self, user=None, short=False, lang_=None, status=True):
+    def format(self, user=None, counterparty=False, lang=None, rate=False, op_name=None, **kwargs):
         if not user:
             user = self.user
-        lang = user.lang
-        if lang_:
-            lang = lang_
+
+        if not lang:
+            lang = user.lang
+
         if self.type_ in ["Deposit", "Withdraw"]:
             return f"{self.amount:.{SYMBOLS[self.currency]}f} {self.currency}  {MSGS[lang][self.type_]} #{self.id}"
         else:
@@ -111,21 +121,25 @@ class Operation(Base):
                 badge_type = "FastExchange"
             elif self.type_ == "EscrowSell":
                 badge_type = "EscrowExchange"
-
             else:
                 badge_type = self.type_
-            if short:
-                msg = f"{MSGS[lang]['Buy']} {self.linked_operation.amount:.{SYMBOLS[self.linked_operation.currency]}f} {self.linked_operation.currency} |" \
-                      f"{MSGS[lang]['Sell']} {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}"
+            if not op_name is None:
+                if op_name:
+                    msg = op_name
+                else:
+                    msg = f"{badge_type}:\n"
+            else:
+                msg = ""
+            msg += f"{MSGS[lang]['Buy']} {self.linked_operation.amount:.{SYMBOLS[self.linked_operation.currency]}f} {self.linked_operation.currency} |" \
+                  f"{MSGS[lang]['Sell']} {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}"
+            if rate:
                 if self.user.exchanges:
                     msg += f"\n{MSGS[lang]['UserRate'].format(self.user.username, self.user.exchanges, self.user.get_average_rate())}"
                 else:
                     msg += f"\n{MSGS[lang]['FirstExchange']}"
-            else:
-                msg = f"{MSGS[lang]['Buy']} {self.linked_operation.amount:.{SYMBOLS[self.linked_operation.currency]}f} {self.linked_operation.currency} |" \
-                      f"{MSGS[lang]['Sell']} {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}  {MSGS[lang][badge_type]} #{self.id}"
-                if self.type_ == "EscrowSell" and status:
-                    msg += f"\n{MSGS[lang]['Counterparty']}: @{self.linked_operation.user.username}"
+
+            if self.type_ == "EscrowSell" and counterparty:
+                msg += f"\n{MSGS[lang]['Counterparty']}: @{self.linked_operation.user.username}"
             return msg
 
 
@@ -162,7 +176,9 @@ class Order(Base):
         self.buy_min = buy_min
         self.sell_amount = sell_amount
 
-    def format(self, lang, status=True):
+    def format(self, lang="en", user=None, status=True):
+        if user:
+            self.user = user
         r = MSGS[lang]["OrderFormat"].format(self.user.username, self.sell_amount, self.sell_currency, self.buy_min,
                                              self.buy_currency)
         if status:
@@ -181,6 +197,7 @@ class Handler:
         engine = sqlalchemy.create_engine(DB_STRING + '?check_same_thread=False')
         base.metadata.create_all(engine)
         self.sessionmaker = sessionmaker(bind=engine, expire_on_commit=False)
+        print("База данных подключена.")
 
     def create_user(self, tg_id, username, lang, first_name):
         session = self.sessionmaker()
@@ -217,16 +234,12 @@ class Handler:
         session = self.sessionmaker()
 
         if type_ == "Deposit" and currency in CRYPTO_CURRENCIES:
-            ops = session.query(Operation).filter(Operation.pseudo_uid != None).filter(
-                Operation.confirmed == False).all()
-            uids = [op.pseudo_uid for op in ops]
-            for uid in range(99, 0, -1):
-                if 100 - uid not in uids:
-                    break
-            uid = 100 - uid
-            sub_uid = Decimal(uid) / Decimal(UID_DIVIDER[currency])
-
-            amount = Decimal(pre_amount) + sub_uid
+            uid = get_uid(pre_amount, currency)
+            while session.query(Operation).filter(Operation.confirmed == False).filter(
+                    Operation.pseudo_uid == uid).first():
+                pre_amount += Decimal(1) / Decimal(10 ** UID_DIVIDER[currency])
+                uid = get_uid(pre_amount, currency)
+            amount = pre_amount
         else:
             amount = pre_amount
             uid = None
@@ -258,19 +271,20 @@ class Handler:
             session.commit()
             op_sell.linked_operation_id = op_buy.id
             op_sell.link(session)
+            op_buy.linked_operation_id = op_sell.id
             session.commit()
             return op_sell
 
     def freeze_operation(self, operation_id, freeze=True):
         session = self.sessionmaker()
         operation = session.query(Operation).filter(Operation.id == operation_id).one()
-        if operation.type_ == "EscrowSell":
-            bal = session.query(Balance).filter(Balance.user_id == operation.user_id).filter(
-                Balance.currency == operation.currency).one()
-            if freeze:
-                bal.amount = bal.amount - operation.amount
-            else:
-                bal.amount = bal.amount + operation.amount
+        bal = session.query(Balance).filter(Balance.user_id == operation.user_id).filter(
+            Balance.currency == operation.currency).one()
+        if freeze:
+            bal.amount = bal.amount - operation.amount
+        else:
+            bal.amount = bal.amount + operation.amount
+        operation.frozen = freeze
         session.commit()
 
     def update_operation(self, id_=None, uid=None, confirm=False, **kwargs):
@@ -284,7 +298,8 @@ class Handler:
             self.execute_operation(op, session)
             op.confirmed = True
             if op.linked_operation:
-                self.execute_operation(op.linked_operation, session)
+                if op.type_ in ["FastSell"]:
+                    self.execute_operation(op.linked_operation, session)
                 op.linked_operation.confirmed = True
 
         for attr_name in kwargs:
@@ -331,8 +346,8 @@ class Handler:
                 Balance.currency == operation.currency).one()
             bal.amount = bal.amount - operation.amount
 
-        elif operation.type_ in ["EscrowSell"]:
-            l_op = operation.linked_operation
+        elif operation.type_ in ["EscrowSell", "EscrowBuy"]:
+            l_op = session.query(Operation).filter(Operation.id == operation.linked_operation_id).one()
             try:
                 bal = session.query(Balance).filter(Balance.user_id == l_op.user_id).filter(
                     Balance.currency == operation.currency).one()
@@ -340,7 +355,6 @@ class Handler:
             except exc.NoResultFound:
                 bal = Balance(l_op.user_id, operation.currency, operation.amount)
                 session.add(bal)
-
         session.commit()
 
     def create_order(self, sell_cur, buy_cur, user_id, sell_sum, buy_min):
@@ -361,13 +375,15 @@ class Handler:
             bal.amount = bal.amount + order.sell_amount
         session.commit()
 
-    def get_orders(self, sell_cur, buy_cur, user_id, self_ = False):
+    def get_orders(self, sell_cur, buy_cur, user_id, self_=False):
         session = self.sessionmaker()
         if self_:
             orders = session.query(Order).filter(Order.user_id == user_id).all()
         else:
             orders = session.query(Order).filter(Order.sell_currency == sell_cur).filter(
                 Order.buy_currency == buy_cur).filter(Order.user_id != user_id).all()
+            orders += session.query(Order).filter(Order.sell_currency == buy_cur).filter(
+                Order.buy_currency == sell_cur).filter(Order.user_id != user_id).all()
         return orders
 
     def get_order(self, order_id):
@@ -388,6 +404,28 @@ class Handler:
             bals[balance.currency] += balance.amount
         session.close()
         return bals
+
+    def get_users(self):
+        session = self.sessionmaker()
+        return session.query(User).all()
+
+    def get_escrows(self, user_id):
+        session = self.sessionmaker()
+        operations = session.query(Operation).filter(
+            Operation.user_id == user_id).filter(Operation.type_ == "EscrowSell").filter(
+            Operation.confirmed == 0).all()
+        for operation in operations:
+            operation.link(session)
+        return operations
+
+
+def get_uid(amount, currency):
+    amount = f"{amount:.8f}"
+    amount = amount[amount.find(".") + 1:]
+    divider = UID_DIVIDER[currency]
+    uid = int(amount[divider - 2:divider])
+    return uid
+
 
 if __name__ == '__main__':
     h = Handler()

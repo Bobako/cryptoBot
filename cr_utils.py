@@ -82,10 +82,6 @@ def save_escrow_chats(new_chat=None):
     except Exception:
         chats = {}
 
-    for chat in ESCROW_CHATS:
-        if str(chat) not in chats:
-            chats[chat] = True
-
     if new_chat:
         chats[new_chat] = True
 
@@ -129,5 +125,47 @@ def get_bin_balance():
     return balances
 
 
+def get_dep_addresses(dict_):
+    client = Client(API_KEY, SECRET_KEY)
+    btc = client.get_deposit_address("BTC", "BTC")["address"]
+    eth = client.get_deposit_address("ETH", "ETH")["address"]
+    usd = client.get_deposit_address("USDT", "TRX")["address"]
+    dict_["BTC"] = [btc, "BTC"]
+    dict_["ETH"] = [eth, "ETH"]
+    dict_["USDT"] = [usd, "TRX"]
+    return dict_
+
+
+def get_new_confirmed_uids():
+    client = Client(API_KEY, SECRET_KEY)
+    hist = client.get_deposit_history()
+    i = 0
+    with open("dep_history.json", "r") as file:
+        old_hist = json.load(file)
+    new_confirmed_uids = []
+    while True:
+        if i >= len(hist):
+            break
+        if hist[i] in old_hist:
+            break
+        dep = hist[i]
+        i += 1
+        coin = dep["coin"]
+        amount = dep["amount"]
+        uid = get_uid(amount, coin)
+        new_confirmed_uids.append(uid)
+    with open("dep_history.json", "w") as file:
+        json.dump(hist, file)
+    return new_confirmed_uids
+
+
+def get_uid(amount, currency):
+    amount = str(amount)
+    amount = amount[amount.find(".") + 1:]
+    divider = UID_DIVIDER[currency]
+    uid = int(amount[divider - 2:divider])
+    return uid
+
+
 if __name__ == '__main__':
-    print(get_bin_balance())
+    print(get_new_confirmed_uids())

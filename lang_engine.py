@@ -34,7 +34,9 @@ FORMAT_DICT = {
     "NoSuchUser": "There is no such user in system, retry",
     "Counterparty": "Counterparty",
     "CPNotified": "We notified counterparty and wait for response",
-    "CPNotification": "You got new escrow exchange offer from @{}:",
+    "CPNotificationChat": "You got new escrow exchange offer from @{}:",
+    "CPNotificationNoChat": "You got new escrow exchange offer from @{}:",
+    "CPNotificationOrder": "You got new escrow exchange offer from @{}:",
     "EscrowDescription": "@{} wants to {}",
     'Accept': "Accept",
     'Deny': "Deny",
@@ -101,6 +103,15 @@ FORMAT_DICT = {
     'Rates': "Exchange rates",
     "Buy": "Buy",
     "Sell": "Sell",
+    "CryptoDepositAddress": "",
+    "EscrowExplanation": "",
+    "ChatEscrow": "",
+    "NoChatEscrow": "",
+"SelectOrderSellCur":"",
+"SelectOrderBuyCur": "",
+    "YourOffer": "YourOffer",
+    "DeleteEscrow":"",
+    "NoOffers":""
 }
 
 
@@ -174,4 +185,7 @@ def load_reqs(filename="langs.xlsx"):
 
 
 if __name__ == '__main__':
-    print(load_reqs())
+    pass
+    #print(load_langs_table_from_google())
+
+

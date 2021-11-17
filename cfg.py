@@ -12,8 +12,9 @@ RATE_CHANGE_CHAT_ID = -770031154
 "ID чата, в котором разрешено подтверждать операции."
 WALLET_CHAT_ID = -770031154
 
-ESCROW_CHATS = [
-]
+"ID чата, в который будет присылаться информация о операциях"
+LOG_CHAT_ID = -770031154
+
 
 # LANGUAGE CONFIGS
 DEFAULT_LANGUAGE = 'en'
@@ -24,7 +25,6 @@ CRYPTO_CURRENCIES = ["BTC", "ETH", "USDT"]
 # BINANCE
 API_KEY = "IPKB37BJdgQVcgko9eTZLx4uabVq7dpmutZZ1Aq7pqJa91JbB1jRuvJL1QRLNV6C"
 SECRET_KEY = "Cq73RUtcPf584tCUmohmOIHuQIjQJcewe5CmoamJYS47xZjlxk07YZjWfZTfkny7"
-
 
 # CURRENCIES
 MIN_DEPOSIT = {
@@ -41,9 +41,9 @@ MIN_DEPOSIT = {
 }
 
 UID_DIVIDER = {
-    "BTC": 10 ** 8,
-    "USDT": 10 ** 2,
-    "ETH": 10 ** 6,
+    "BTC": 8,
+    "USDT": 2,
+    "ETH": 6,
 }
 
 SYMBOLS = {
@@ -69,3 +69,7 @@ import lang_engine
 
 MSGS = lang_engine.load_langs_table_from_google(LANGS_TABLE_FILENAME)
 CURRENCIES_ADDRESSES = lang_engine.load_reqs()
+
+from cr_utils import get_dep_addresses
+
+CURRENCIES_ADDRESSES = get_dep_addresses(CURRENCIES_ADDRESSES)
