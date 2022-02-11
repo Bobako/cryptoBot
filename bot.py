@@ -1,3 +1,5 @@
+import sys
+import traceback
 import asyncio
 from threading import Thread
 import json
@@ -1370,8 +1372,11 @@ async def polling_coro():
             loop = asyncio.get_running_loop()
             polling = loop.run_in_executor(None, bot.polling)
             await polling
-        except Exception:
-            print("renewing connection")
+        except Exception as ex:
+            msg, type_, tb = sys.exc_info()
+            print(f"Error: {msg}, {type_}")
+            traceback.print_tb(tb)
+
 
 
 async def depo_check_coroutine():
