@@ -7,6 +7,7 @@ import decimal
 import math
 import time
 from decimal import Decimal
+import logging
 
 import requests
 import telebot
@@ -68,6 +69,7 @@ db = database.Handler()
 cb = Callback()
 bot = telebot.TeleBot(BOT_TOKEN)
 cr_utils.save_escrow_chats()
+logging.basicConfig(format='%(asctime)s  ---  %(message)s \n', level=logging.WARNING, filename='log.txt')
 
 
 # admin commands
@@ -511,7 +513,7 @@ def p2p_exchange6(message, order_id):
         bot.register_next_step_handler(message, p2p_exchange6, order_id)
         return
 
-    if amount*order.rate > db.get_user(user.id).balance_in(order.buy_currency):
+    if amount * order.rate > db.get_user(user.id).balance_in(order.buy_currency):
         bot.send_message(user.id, MSGS[user.lang]["NotEnough"], reply_markup=back_keyboard(user))
         bot.register_next_step_handler(message, p2p_exchange6, order_id)
         return
@@ -1215,7 +1217,6 @@ def select_currency(user, currencies, type_):
                             reply_markup=currencies_keyboard(currencies))
 
 
-
 def deposit(user):
     currencies = [user.fiat] + CRYPTO_CURRENCIES
     message = select_currency(user, currencies, "Deposit")
@@ -1372,11 +1373,10 @@ async def polling_coro():
             loop = asyncio.get_running_loop()
             polling = loop.run_in_executor(None, bot.polling)
             await polling
-        except Exception as ex:
+        except Exception:
             msg, type_, tb = sys.exc_info()
-            print(f"Error: {msg}, {type_}")
-            traceback.print_tb(tb)
-
+            tb = '\n'.join(traceback.format_tb(tb))
+            logging.warning(f"{msg}, {type_}\n {tb}")
 
 
 async def depo_check_coroutine():
