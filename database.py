@@ -131,7 +131,7 @@ class Operation(Base):
             else:
                 msg = ""
             msg += f"{MSGS[lang]['Buy']} {self.linked_operation.amount:.{SYMBOLS[self.linked_operation.currency]}f} {self.linked_operation.currency} |" \
-                  f"{MSGS[lang]['Sell']} {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}"
+                   f"{MSGS[lang]['Sell']} {self.amount:.{SYMBOLS[self.currency]}f} {self.currency}"
             if rate:
                 if self.user.exchanges:
                     msg += f"\n{MSGS[lang]['UserRate'].format(self.user.username, self.user.exchanges, self.user.get_average_rate())}"
@@ -167,20 +167,27 @@ class Order(Base):
     sell_amount = Column(SQLiteNumeric)
 
     buy_currency = Column(String)
-    buy_min = Column(SQLiteNumeric)
+    min_trade_amount = Column(SQLiteNumeric)
 
-    def __init__(self, user_id, sell_currency, buy_currency, buy_min, sell_amount):
+    rate = Column(SQLiteNumeric)
+
+    def __init__(self, user_id, sell_currency, buy_currency, min_trade_amount, sell_amount, rate):
         self.user_id = user_id
         self.sell_currency = sell_currency
         self.buy_currency = buy_currency
-        self.buy_min = buy_min
+        self.min_trade_amount = min_trade_amount
         self.sell_amount = sell_amount
+        self.rate = rate
 
-    def format(self, lang="en", user=None, status=True):
+    def format(self, lang="en", user=None, status=True, to_me=False):
         if user:
             self.user = user
-        r = MSGS[lang]["OrderFormat"].format(self.user.username, self.sell_amount, self.sell_currency, self.buy_min,
-                                             self.buy_currency)
+        if to_me:
+            username = ""
+        else:
+            username = "@" + self.user.username
+        r = MSGS[lang]["OrderFormat"].format(username, self.min_trade_amount, self.sell_amount,
+                                             self.sell_currency, self.rate, self.buy_currency)
         if status:
             if self.user.exchanges:
                 r += f"\n{MSGS[lang]['UserRate'].format(self.user.username, self.user.exchanges, self.user.get_average_rate())}"
@@ -337,6 +344,7 @@ class Handler:
             try:
                 bal = session.query(Balance).filter(Balance.user_id == operation.user_id).filter(
                     Balance.currency == operation.currency).one()
+                bal.amount = bal.amount + operation.amount
             except exc.NoResultFound:
                 bal = Balance(operation.user_id, operation.currency, operation.amount)
                 session.add(bal)
@@ -357,9 +365,9 @@ class Handler:
                 session.add(bal)
         session.commit()
 
-    def create_order(self, sell_cur, buy_cur, user_id, sell_sum, buy_min):
+    def create_order(self, user_id, sell_currency, buy_currency, min_trade_amount, sell_amount, rate):
         session = self.sessionmaker()
-        order = Order(user_id, sell_cur, buy_cur, buy_min, sell_sum)
+        order = Order(user_id, sell_currency, buy_currency, min_trade_amount, sell_amount, rate)
         session.add(order)
         session.commit()
         self.freeze_order(order.id)
@@ -373,6 +381,17 @@ class Handler:
             bal.amount = bal.amount - order.sell_amount
         else:
             bal.amount = bal.amount + order.sell_amount
+        session.commit()
+
+    def update_order(self, order_id, **kwargs):
+        session = self.sessionmaker()
+        order = session.query(Order).filter(Order.id == order_id).one()
+        for attr_name in kwargs:
+            value = kwargs[attr_name]
+            setattr(order, attr_name, value)
+        if "sell_amount" in kwargs:
+            if order.sell_amount < order.min_trade_amount:
+                order.min_trade_amount = order.sell_amount
         session.commit()
 
     def get_orders(self, sell_cur, buy_cur, user_id, self_=False):

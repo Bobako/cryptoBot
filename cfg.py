@@ -1,6 +1,3 @@
-# DATABASE CONFIG
-DB_STRING = "sqlite:///database.db"
-
 # BOT CONFIG
 BOT_TOKEN = "2143260005:AAGpdMdfNFZ81gX-9SZ6-y0Cu6AcDpfxlCE"
 ADMINS = ["bobak00"]
@@ -15,18 +12,14 @@ WALLET_CHAT_ID = -770031154
 "ID чата, в который будет присылаться информация о операциях"
 LOG_CHAT_ID = -770031154
 
-
-# LANGUAGE CONFIGS
+"Язык по умолчанию"
 DEFAULT_LANGUAGE = 'en'
 
-FIAT_CURRENCIES = ["BRL", "COP", "GHS", "NGN", "USD (Ecuador)", "VES", "XOF"]
-CRYPTO_CURRENCIES = ["BTC", "ETH", "USDT"]
-
-# BINANCE
+"Ключи binance API "
 API_KEY = "IPKB37BJdgQVcgko9eTZLx4uabVq7dpmutZZ1Aq7pqJa91JbB1jRuvJL1QRLNV6C"
 SECRET_KEY = "Cq73RUtcPf584tCUmohmOIHuQIjQJcewe5CmoamJYS47xZjlxk07YZjWfZTfkny7"
 
-# CURRENCIES
+"Минимальная сумма депозита"
 MIN_DEPOSIT = {
     "BTC": 0.000001,
     "USDT": 1,
@@ -40,12 +33,7 @@ MIN_DEPOSIT = {
     "XOF": 1,
 }
 
-UID_DIVIDER = {
-    "BTC": 8,
-    "USDT": 2,
-    "ETH": 6,
-}
-
+"Знаков после запятой"
 SYMBOLS = {
     "BTC": 8,
     "USDT": 2,
@@ -59,11 +47,22 @@ SYMBOLS = {
     "XOF": 2,
 }
 
+
+"не менять"
+UID_DIVIDER = {
+    "BTC": 8,
+    "USDT": 2,
+    "ETH": 6,
+}
+FIAT_CURRENCIES = ["BRL", "COP", "GHS", "NGN", "USD (Ecuador)", "VES", "XOF"]
+CRYPTO_CURRENCIES = ["BTC", "ETH", "USDT"]
 # OTHER
 USDT_FIAT_RATES_JSON = "usdt_fiat_rates.json"
 CRYPTO_RATES_JSON = "crypto_rates.json"
 CHATS_JSON = "CHATS_JSON"
 LANGS_TABLE_FILENAME = "langs.xlsx"
+# DATABASE CONFIG
+DB_STRING = "sqlite:///database.db"
 
 import lang_engine
 

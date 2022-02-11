@@ -128,6 +128,8 @@ def user_admin(message):
             user = db.get_user(tg_id=int(user_id))
     except exc.NoResultFound:
         msg = "Пользователь не найден"
+    except ValueError:
+        msg = "Ошибка форматирования"
     else:
         msg = f"{user.first_name} - {('@' + user.username) if user.username else ''} ({user.id}): {'; '.join([str(bal.amount) + ' ' + bal.currency for bal in user.balance])}"
         rate_ = (user.sum_rate / user.exchanges if user.exchanges else 0)
@@ -396,7 +398,7 @@ def create_order2(message, sell_cur, but_cur):
         bot.send_message(user.id, MSGS[user.lang]["NotEnough"], reply_markup=back_keyboard(user))
         bot.register_next_step_handler(message, create_order2, sell_cur, but_cur)
         return
-    bot.send_message(user.id, MSGS[user.lang]["EnterMinBuy"])
+    bot.send_message(user.id, MSGS[user.lang]["MinTradeAmount"])
     bot.register_next_step_handler(message, create_order3, sell_cur, but_cur, amount)
 
 
@@ -414,7 +416,28 @@ def create_order3(message, sell_cur, buy_cur, sell_amount):
         bot.send_message(user.id, MSGS[user.lang]["FormatError"], reply_markup=back_keyboard(user))
         bot.register_next_step_handler(message, create_order3, sell_cur, buy_cur, sell_amount)
         return
-    db.create_order(sell_cur, buy_cur, user.id, sell_amount, amount)
+    min_trade_amount = amount
+    rate_ = str(cr_utils.rate(sell_cur, buy_cur, True))
+    bot.send_message(user.id, MSGS[user.lang]["YourRate"].format(sell_cur, buy_cur, rate_))
+    bot.register_next_step_handler(message, create_order4, sell_cur, buy_cur, sell_amount, min_trade_amount)
+
+
+def create_order4(message, sell_cur, buy_cur, sell_amount, min_trade_amount):
+    user = db.get_user(message.from_user.id)
+    amount = message.text
+    if amount == MSGS[user.lang]["Back"]:
+        p2p_exchange4(user, sell_cur, buy_cur)
+        return
+    try:
+        amount = Decimal(amount.replace(",", "."))
+        if amount <= 0:
+            raise decimal.InvalidOperation
+    except decimal.InvalidOperation:
+        bot.send_message(user.id, MSGS[user.lang]["FormatError"], reply_markup=back_keyboard(user))
+        bot.register_next_step_handler(message, create_order4, sell_cur, buy_cur, sell_amount, min_trade_amount)
+        return
+    rate = amount
+    db.create_order(user.id, sell_cur, buy_cur, min_trade_amount, sell_amount, rate)
     bot.send_message(user.id, MSGS[user.lang]["OrderCreated"])
     p2p_exchange4(user, sell_cur, buy_cur)
 
@@ -448,10 +471,10 @@ def orders_paginator2(call, data, sell_cur, buy_cur, start, end):
         return
     else:
         order_id = data["order_id"]
-        msg = MSGS[user.lang]["OfferForOrder"].format(db.get_order(order_id).buy_min) + "\n" + \
-              MSGS[user.lang]["CurrentBalance"].format(
-                  db.get_user(call.from_user.id).balance_in(db.get_order(order_id).buy_currency),
-                  db.get_order(order_id).buy_currency)
+        order = db.get_order(order_id)
+        msg = MSGS[user.lang]["OfferForOrder"].format(f"{order.min_trade_amount:.{SYMBOLS[order.sell_currency]}f}",
+                                                      f"{order.sell_amount:.{SYMBOLS[order.sell_currency]}f}",
+                                                      order.sell_currency)
         message = bot.send_message(user.id, msg,
                                    reply_markup=back_keyboard(user))
 
@@ -474,21 +497,27 @@ def p2p_exchange6(message, order_id):
         bot.register_next_step_handler(message, p2p_exchange6, order_id)
         return
 
-    if amount < order.buy_min:
-        bot.send_message(user.id, MSGS[user.lang]["ToSmallAmount"].format(order.buy_min, order.buy_currency),
+    if amount < order.min_trade_amount:
+        bot.send_message(user.id, MSGS[user.lang]["ToSmallAmount"].format(order.min_trade_amount, order.buy_currency),
                          reply_markup=back_keyboard(user))
         bot.register_next_step_handler(message, p2p_exchange6, order_id)
         return
 
-    if amount > db.get_user(user.id).balance_in(order.buy_currency):
+    if amount > order.sell_amount:
+        bot.send_message(user.id, MSGS[user.lang]["ToBigAmount"].format(order.sell_amount, order.buy_currency),
+                         reply_markup=back_keyboard(user))
+        bot.register_next_step_handler(message, p2p_exchange6, order_id)
+        return
+
+    if amount*order.rate > db.get_user(user.id).balance_in(order.buy_currency):
         bot.send_message(user.id, MSGS[user.lang]["NotEnough"], reply_markup=back_keyboard(user))
         bot.register_next_step_handler(message, p2p_exchange6, order_id)
         return
 
     message = bot.send_message(user.id,
-                               order.format(user.lang, user=db.get_user(order.user_id)) + "\n" + MSGS[user.lang][
+                               order.format(user.lang) + "\n" + MSGS[user.lang][
                                    "YourOffer"].format(amount,
-                                                       order.buy_currency),
+                                                       order.sell_currency),
                                reply_markup=get_confirm_keyboard(user))
     cb.register_callback(message, p2p_exchange7, order_id, amount)
 
@@ -505,23 +534,29 @@ def p2p_exchange7(call, data, order_id, amount):
     order = db.get_order(order_id)
     bot.send_message(user.id, MSGS[user.lang]["CPNotified"], reply_markup=menu_keyboard(user))
     message = bot.send_message(order.user_id,
-                               MSGS[order.user.lang]["CPNotificationOrder"].format(order.format(order.user.lang, False),
-                                                                                   user.username, amount,
-                                                                                   order.buy_currency),
+                               MSGS[order.user.lang]["CPNotificationOrder"].format(
+                                   order.format(order.user.lang, status=False, to_me=True),
+                                   user.username, amount,
+                                   order.buy_currency),
                                reply_markup=get_confirm_keyboard(order.user))
     cb.register_callback(message, p2p_exchange8, order_id, user.id, amount)
 
 
-def p2p_exchange8(call, data, order_id, user_id, buy_amount):
+def p2p_exchange8(call, data, order_id, user_id, sell_amount):
     c_user = db.get_user(call.from_user.id)
     if not data["confirm"]:
         return
-
     order = db.get_order(order_id)
-    op = db.create_linked_operations("EscrowExchange", order.user_id, user_id, order.sell_currency, order.sell_amount,
+    buy_amount = sell_amount * order.rate
+    user = db.get_user(user_id)
+    if buy_amount > user.balance_in(order.buy_currency):
+        bot.send_message(c_user.id, MSGS[c_user.lang]["CounterpartyNotEnough"].format(user.username))
+        return
+    op = db.create_linked_operations("EscrowExchange", order.user_id, user_id, order.sell_currency, sell_amount,
                                      order.buy_currency, buy_amount)
     db.freeze_order(order_id, False)
-    db.delete_order(order_id)
+    db.update_order(order_id, sell_amount=order.sell_amount - sell_amount)
+    db.freeze_order(order_id, True)
     db.freeze_operation(op.id)
     db.freeze_operation(op.linked_operation_id)
     op = db.get_operation(op.id)
@@ -824,7 +859,7 @@ def escrow_exchange8(operation_id, chat_id):
     message = bot.send_message(chat_id, msg)
     self_id = message.from_user.id
 
-    bot.register_next_step_handler(message, escrow_wait_for_commands, operation_id, chat_id, user.id, self_id)
+    bot.register_next_step_handler(message, escrow_wait_for_commands, operation_id, chat_id, seller.id, self_id)
     target = lambda: scan_for_noobs(chat_id, msg)
     t = Thread(target=target)
     t.start()
@@ -1005,7 +1040,7 @@ def fast_exchange4(message, sell_cur, buy_cur):
         return
     sell_amount = amount
     buy_amount = amount / cr_utils.rate(buy_cur, sell_cur, buy_cur not in FIAT_CURRENCIES)
-    str_amount = f"{buy_amount:.{SYMBOLS[buy_cur]}}"
+    str_amount = f"{buy_amount:.{SYMBOLS[buy_cur]}f}"
     message = bot.send_message(user.id, MSGS[user.lang]["ExchangeResult"].format(str_amount, buy_cur),
                                reply_markup=get_confirm_keyboard(user))
     cb.register_callback(message, fast_exchange5, sell_cur, buy_cur, sell_amount, buy_amount)
@@ -1178,6 +1213,7 @@ def select_currency(user, currencies, type_):
                             reply_markup=currencies_keyboard(currencies))
 
 
+
 def deposit(user):
     currencies = [user.fiat] + CRYPTO_CURRENCIES
     message = select_currency(user, currencies, "Deposit")
@@ -1334,7 +1370,7 @@ async def polling_coro():
             loop = asyncio.get_running_loop()
             polling = loop.run_in_executor(None, bot.polling)
             await polling
-        except requests.exceptions.ReadTimeout:
+        except Exception:
             print("renewing connection")
 
 
