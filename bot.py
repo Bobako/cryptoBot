@@ -137,7 +137,7 @@ def user_admin(message):
     else:
         msg = f"{user.first_name} - {('@' + user.username) if user.username else ''} ({user.id}): {'; '.join([str(bal.amount) + ' ' + bal.currency for bal in user.balance])}"
         rate_ = (user.sum_rate / user.exchanges if user.exchanges else 0)
-        msg += f"\n{user.exchanges} завершенных обменов, средний рейтинг - {rate_:.1f}"
+        msg += f"\n{user.exchanges} завершенных обменов, средний рейтинг - {rate_:.1f}\n"
         msg += f"Язык - {user.lang}"
     bot.send_message(WALLET_CHAT_ID, msg)
 
@@ -518,8 +518,9 @@ def p2p_exchange6(message, order_id):
         bot.register_next_step_handler(message, p2p_exchange6, order_id)
         return
 
+    f_user = db.get_user(order.user_id)
     message = bot.send_message(user.id,
-                               order.format(user.lang) + "\n" + MSGS[user.lang][
+                               order.format(user.lang, user=f_user) + "\n" + MSGS[user.lang][
                                    "YourOffer"].format(amount,
                                                        order.sell_currency),
                                reply_markup=get_confirm_keyboard(user))
@@ -1228,11 +1229,7 @@ def deposit2(call, data):
     currency = data["currency"]
     bot.send_message(user.id, MSGS[user.lang]["CurrencyChosen"].format(currency))
     msg = MSGS[user.lang]["OperationAmount"].format(MSGS[user.lang]["Deposit"].lower())
-    print(currency)
-    print(MIN_DEPOSIT[currency])
-    print(SYMBOLS[currency])
     min_dep = f"{MIN_DEPOSIT[currency]:.{SYMBOLS[currency]}f}"
-    print(min_dep)
     msg += f"\n{MSGS[user.lang]['MinDeposit'].format(min_dep, currency)}"
     message = bot.send_message(user.id, msg,
                                reply_markup=back_keyboard(user))
