@@ -1,3 +1,5 @@
+import socket
+
 import openpyxl
 
 from google.oauth2 import service_account
@@ -107,11 +109,14 @@ FORMAT_DICT = {
     "EscrowExplanation": "",
     "ChatEscrow": "",
     "NoChatEscrow": "",
-"SelectOrderSellCur":"",
-"SelectOrderBuyCur": "",
+    "SelectOrderSellCur": "",
+    "SelectOrderBuyCur": "",
     "YourOffer": "YourOffer",
-    "DeleteEscrow":"",
-    "NoOffers":""
+    "DeleteEscrow": "",
+    "NoOffers": "",
+    "MinTradeAmount": "",
+    "YourRate": "",
+    "ToBigAmount": ""
 }
 
 
@@ -150,23 +155,27 @@ def load_langs_table_from_google(file_name="langs.xlsx"):
     credentials = service_account.Credentials.from_service_account_file(
         service_account_file, scopes=scopes)
     service = build('drive', 'v3', credentials=credentials)
-    results = service.files().list(pageSize=10,
+    try:
+        results = service.files().list(pageSize=10,
                                    fields="nextPageToken, files(id, name, mimeType)").execute()
-    file_id = ''
-    for file in results["files"]:
-        if file["name"] == file_name:
-            file_id = file["id"]
-            break
+    except socket.timeout:
+        print("Ошибка (таймаут от серверов гугла). Будет использоваться старая версия.")
+    else:
+        file_id = ''
+        for file in results["files"]:
+            if file["name"] == file_name:
+                file_id = file["id"]
+                break
 
-    request = service.files().get_media(fileId=file_id)
-    filename = file_name
-    fh = io.FileIO(filename, 'wb')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-        print(".", end="")
-    print("готово\n")
+        request = service.files().get_media(fileId=file_id)
+        filename = file_name
+        fh = io.FileIO(filename, 'wb')
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            print(".", end="")
+        print("готово\n")
     return load_lang_table(file_name)
 
 
@@ -186,6 +195,4 @@ def load_reqs(filename="langs.xlsx"):
 
 if __name__ == '__main__':
     pass
-    #print(load_langs_table_from_google())
-
-
+    # print(load_langs_table_from_google())

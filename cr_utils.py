@@ -72,7 +72,7 @@ def rate(cur1, cur2, buy):
     elif cur1 in CRYPTO_CURRENCIES and cur2 in FIAT_CURRENCIES:
         return crypt_to_fiat_rate(cur2, cur1, buy)
     elif cur1 in FIAT_CURRENCIES and cur2 in CRYPTO_CURRENCIES:
-        return Decimal(1) / crypt_to_fiat_rate(cur2, cur1, not buy)
+        return Decimal(1) / crypt_to_fiat_rate(cur1, cur2, not buy)
 
 
 def save_escrow_chats(new_chat=None):
