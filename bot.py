@@ -1228,7 +1228,12 @@ def deposit2(call, data):
     currency = data["currency"]
     bot.send_message(user.id, MSGS[user.lang]["CurrencyChosen"].format(currency))
     msg = MSGS[user.lang]["OperationAmount"].format(MSGS[user.lang]["Deposit"].lower())
-    msg += f"\n{MSGS[user.lang]['MinDeposit'].format(f'{MIN_DEPOSIT[currency]:.{SYMBOLS[currency]}f}', currency)}"
+    print(currency)
+    print(MIN_DEPOSIT[currency])
+    print(SYMBOLS[currency])
+    min_dep = f"{MIN_DEPOSIT[currency]:.{SYMBOLS[currency]}f}"
+    print(min_dep)
+    msg += f"\n{MSGS[user.lang]['MinDeposit'].format(min_dep, currency)}"
     message = bot.send_message(user.id, msg,
                                reply_markup=back_keyboard(user))
     bot.register_next_step_handler(message, deposit3, currency)
