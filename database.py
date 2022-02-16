@@ -180,17 +180,19 @@ class Order(Base):
         self.rate = rate
 
     def format(self, lang="en", user=None, status=True, to_me=False):
-        if user:
-            self.user = user
+        if not user:
+            f_user = self.user
+        else:
+            f_user = user
         if to_me:
             username = ""
         else:
-            username = "@" + self.user.username
+            username = "@" + f_user.username
         r = MSGS[lang]["OrderFormat"].format(username, self.min_trade_amount, self.sell_amount,
                                              self.sell_currency, self.rate, self.buy_currency)
         if status:
-            if self.user.exchanges:
-                r += f"\n{MSGS[lang]['UserRate'].format(self.user.username, self.user.exchanges, self.user.get_average_rate())}"
+            if f_user.exchanges:
+                r += f"\n{MSGS[lang]['UserRate'].format(f_user.username, f_user.exchanges, f_user.get_average_rate())}"
             else:
                 r += f"\n{MSGS[lang]['FirstExchange']}"
         return r
