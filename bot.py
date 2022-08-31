@@ -1404,10 +1404,10 @@ def depo_check():
                                  op.format()))
 
 
-def main():
+def main(use_api=False):
     loop = asyncio.get_event_loop()
-
-    loop.create_task(depo_check_coroutine())
+    if use_api:
+        loop.create_task(depo_check_coroutine())
     loop.create_task(polling_coro())
     loop.run_forever()
 
@@ -1417,4 +1417,5 @@ def log(msg):
 
 
 if __name__ == '__main__':
-    main()
+    use_api = "useApi" in sys.argv  # run with argument useApi to check for crypto deposit changes
+    main(use_api=use_api)

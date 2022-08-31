@@ -1,5 +1,10 @@
+import configparser
+
+cfg = configparser.ConfigParser()
+cfg.read("cfg.ini")
+
 # BOT CONFIG
-BOT_TOKEN = "2143260005:AAGpdMdfNFZ81gX-9SZ6-y0Cu6AcDpfxlCE"
+BOT_TOKEN = cfg["BOT"]["token"]
 ADMINS = ["bobak00"]
 
 "ID чата, в котором разрешено менять обменные курсы."
@@ -16,8 +21,8 @@ LOG_CHAT_ID = -770031154
 DEFAULT_LANGUAGE = 'en'
 
 "Ключи binance API "
-API_KEY = "IPKB37BJdgQVcgko9eTZLx4uabVq7dpmutZZ1Aq7pqJa91JbB1jRuvJL1QRLNV6C"
-SECRET_KEY = "Cq73RUtcPf584tCUmohmOIHuQIjQJcewe5CmoamJYS47xZjlxk07YZjWfZTfkny7"
+API_KEY = cfg["BINANCE"]["API"]
+SECRET_KEY = cfg["BINANCE"]["SECRET"]
 
 "Минимальная сумма депозита"
 MIN_DEPOSIT = {
